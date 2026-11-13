@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from tqdm import tqdm
-import tensorflow_hub as hub
+from monocular_demos.metrabs_torch import load_metrabs
 
 def jax_memory_limit():
     import os
@@ -76,14 +76,6 @@ def video_reader(filename: str, batch_size: int = 8, width: int | None = None):
     
     cap.release()  # Release the initial capture object
     return frame_generator(), n_frames
-
-def load_metrabs():
-    if load_metrabs.model is not None:
-        return load_metrabs.model
-    load_metrabs.model = hub.load('https://bit.ly/metrabs_l')  # Takes about 3 minutes
-    return load_metrabs.model
-
-load_metrabs.model = None
 
 joint_names = [
     "backneck",

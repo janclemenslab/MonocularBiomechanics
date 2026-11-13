@@ -1,36 +1,28 @@
-from monocular_demos.utils import jax_memory_limit, tensorflow_memory_limit
-tensorflow_memory_limit()
-jax_memory_limit()
 import os
+import sys
 from typing import List
 
-os.environ.setdefault("MUJOCO_GL", "egl")
-os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+os.environ.setdefault("MUJOCO_GL", "glfw" if sys.platform == "darwin" else "egl")
+if sys.platform != "darwin":
+    os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 
 import cv2
 import gradio as gr
-import jax
-import jax.numpy as jnp
+import torch
 import numpy as np
 import plotly.graph_objects as go
-import tensorflow as tf
-from monocular_demos.biomechanics_mjx.forward_kinematics import ForwardKinematics
+from monocular_demos.biomechanics_mjx.native_model import ForwardKinematics
 from monocular_demos.biomechanics_mjx.visualize import render_trajectory, render_overlay
-from monocular_demos.biomechanics_mjx.monocular_trajectory import (
+from monocular_demos.biomechanics_mjx.torch_monocular_trajectory import (
     fit_model,
     get_model,
 )
 from monocular_demos.utils import load_metrabs, joint_names, video_reader
-from monocular_demos.dataset import MonocularDataset,get_samsung_calibration
+from monocular_demos.torch_dataset import MonocularDataset,get_samsung_calibration
 
 fk = ForwardKinematics(
     xml_path="monocular_demos/biomechanics_mjx/data/humanoid/humanoid_torque.xml",
 )
-
-jax.config.update("jax_compilation_cache_dir", "./.jax_cache")
-jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
-jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
-jax.config.update("jax_enable_x64", True)
 
 
 def save_metrabs_data(accumulated, video_name):
@@ -52,8 +44,8 @@ def save_metrabs_data(accumulated, video_name):
         pose2d.append(p2d[0].numpy())
         confs.append(np.ones((87)))
 
-        with open(f"{fname}_keypoints.npz", "wb") as f:
-            np.savez(f, keypoints3d=pose3d, keypoints2d=pose2d, boxes=boxes, confs=confs)
+    with open(f"{fname}_keypoints.npz", "wb") as f:
+        np.savez(f, keypoints3d=pose3d, keypoints2d=pose2d, boxes=boxes, confs=confs)
 
 def find_matching_video(fname):
     """Find a video file that matches the given filename with any video extension"""
@@ -218,9 +210,7 @@ def process_videos_with_metrabs(
                 else:
                     # concatenate the ragged tensor along the batch for each element in the dictionary
                     for key in accumulated.keys():
-                        accumulated[key] = tf.concat(
-                            [accumulated[key], pred[key]], axis=0
-                        )
+                        accumulated[key].extend(pred[key])
             save_metrabs_data(accumulated, video_path)
             video_count += 1
 
@@ -233,10 +223,6 @@ def process_videos_with_biomechanics(
     """
     Process the uploaded videos with biomechanics fitting. Replace this with your actual processing logic.
     """
-    import equinox as eqx
-    import jax
-    jax.clear_caches()
-    eqx.clear_caches()
 
     max_iters = 10000
 
@@ -247,6 +233,7 @@ def process_videos_with_biomechanics(
     if not video_files:
         return "No videos uploaded."
 
+    processed_videos = []
     timestamps_list = []
     keypoints2d_list = []
     keypoints3d_list = []
@@ -258,14 +245,18 @@ def process_videos_with_biomechanics(
                 print(f"Video {video_path}: No Metrabs data found.")
                 continue
 
+            processed_videos.append(video_path)
             fps = get_framerate(video_path)
             timestamps = np.arange(0, len(keypoints2d)) / fps
             timestamps_list.append(timestamps)
-            keypoints2d_list.append(keypoints2d[jnp.newaxis])  # Add camera dimension
-            keypoints3d_list.append(keypoints3d[jnp.newaxis])  # Add camera dimension
+            keypoints2d_list.append(keypoints2d[np.newaxis])  # Add camera dimension
+            keypoints3d_list.append(keypoints3d[np.newaxis])  # Add camera dimension
             confs_list.append(
-                jnp.ones_like(keypoints2d[..., 0])[jnp.newaxis]
-            )  # fake confidences
+                confs[np.newaxis]
+            )
+
+    if not processed_videos:
+        return "No detected keypoints were found for the uploaded videos."
 
     dataset = MonocularDataset(
         timestamps=timestamps_list,
@@ -289,9 +280,9 @@ def process_videos_with_biomechanics(
     )
     progress(1.0, desc="Biomechanics model fit successfully.")
 
-    for i, video_path in enumerate(video_files):
+    for i, video_path in enumerate(processed_videos):
         progress(
-            i / len(video_files),
+            i / len(processed_videos),
             desc=f"Saving biomechanics for video {i+1}/{len(video_files)}.",
         )
         timestamps = dataset.get_all_timestamps(i)
@@ -311,12 +302,12 @@ def process_videos_with_biomechanics(
             np.savez(
                 f,
                 timestamps=np.array(timestamps),
-                qpos=np.array(qpos),
-                qvel=np.array(qvel),
-                rnc=np.array(rnc),
-                sites=np.array(state.site_xpos),
-                joints=np.array(state.xpos),
-                scale=np.array(model.body_scale),
+                qpos=qpos.detach().cpu().numpy(),
+                qvel=qvel.detach().cpu().numpy(),
+                rnc=rnc.detach().cpu().numpy(),
+                sites=state.site_xpos.detach().cpu().numpy(),
+                joints=state.xpos.detach().cpu().numpy(),
+                scale=model.body_scale.detach().cpu().numpy(),
                 video_path=video_path,
             )
 
@@ -562,4 +553,5 @@ with gr.Blocks(title="Open Portable Biomechanics Lab") as demo:
         )
 
 
-demo.launch()
+if __name__ == "__main__":
+    demo.launch()

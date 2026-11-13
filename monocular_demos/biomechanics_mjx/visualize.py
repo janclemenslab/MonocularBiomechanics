@@ -1,19 +1,18 @@
+from __future__ import annotations
 import mujoco
 import numpy as np
 from typing import List, Dict
-from jaxtyping import Float, Array
 from tqdm import trange, tqdm
 import shutil
 import subprocess
 import cv2
-from monocular_demos.biomechanics_mjx.forward_kinematics import (
+from monocular_demos.biomechanics_mjx.native_model import (
     ForwardKinematics,
     scale_model,
 )
-from monocular_demos.dataset import get_samsung_calibration
-from monocular_demos.biomechanics_mjx.monocular_trajectory import project_dynamic
+from monocular_demos.torch_dataset import get_samsung_calibration
 import pyrender
-from monocular_demos.camera import get_intrinsic, get_extrinsic, distort_3d
+from monocular_demos.torch_camera import get_intrinsic, get_extrinsic, distort_3d
 from stl import mesh  # install via pip install numpy-stl
 import trimesh
 import tempfile
@@ -61,7 +60,7 @@ def render_trajectory(
         if filename is None, returns the images as a list
     """
 
-    from monocular_demos.biomechanics_mjx.forward_kinematics import (
+    from monocular_demos.biomechanics_mjx.native_model import (
         ForwardKinematics,
         offset_sites,
         scale_model,
@@ -248,10 +247,10 @@ def get_overlay_monocular(
         downsample: the downsample factor
     """
 
-    from monocular_demos.camera import get_extrinsic_dynamic
+    from monocular_demos.torch_camera import get_extrinsic_dynamic
 
-    K = get_intrinsic(camera_params, 0)
-    camera_pose_timeseries = np.array(get_extrinsic_dynamic(camera_params, 0, rvec))
+    K = get_intrinsic(camera_params, 0).detach().cpu().numpy()
+    camera_pose_timeseries = get_extrinsic_dynamic(camera_params, 0, rvec).detach().cpu().numpy()
 
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
 
@@ -290,9 +289,9 @@ def get_overlay_monocular(
         vertices, faces = get_composed_meshes(scaled_model, data)
 
         def correct_vertices(vertices):
-            vertices = distort_3d(camera_params, 0, vertices * 1000)
+            vertices = distort_3d(camera_params, 0, vertices * 1000).detach().cpu().numpy()
             vertices = np.concatenate([vertices, np.ones((*vertices.shape[:-1], 1))], axis=-1)
-            extri = np.linalg.inv(get_extrinsic(camera_params, 0))
+            extri = np.linalg.inv(get_extrinsic(camera_params, 0).detach().cpu().numpy())
             vertices = (extri @ vertices[..., None])[..., 0]
             vertices = vertices[:, :3] / vertices[:, 3, None]
             vertices = vertices / 1000.0
@@ -418,9 +417,13 @@ def video_overlay(
 
     if compress:
         fd, temp = tempfile.mkstemp(suffix=".mp4")
-        subprocess.run(["ffmpeg", "-y", "-i", output_name, "-c:v", "libx264", "-b:v", bitrate, temp])
         os.close(fd)
-        shutil.move(temp, output_name)
+        try:
+            subprocess.run(["ffmpeg", "-y", "-i", output_name, "-c:v", "libx264", "-b:v", bitrate, temp], check=True)
+            shutil.move(temp, output_name)
+        finally:
+            if os.path.exists(temp):
+                os.remove(temp)
 
 
 def set_axes_equal(ax):

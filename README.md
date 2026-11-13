@@ -21,30 +21,44 @@ Movement directly reflects neurological and musculoskeletal health, yet objectiv
 <video src="docs/static/videos/jd_running.mp4" width="800" controls autoplay muted loop></video>
 
 # Code
-Tested with Ubuntu 24.04.3 LTS using [uv](https://docs.astral.sh/uv/).
+The Torch fork has been tested on macOS with an Apple M2 Max. Install into a conda environment with [uv](https://docs.astral.sh/uv/).
 
 Clone and install
 ```
-git clone git@github.com:IntelligentSensingAndRehabilitation/MonocularBiomechanics.git
+git clone https://github.com/janclemenslab/MonocularBiomechanics.git
 cd MonocularBiomechanics/
-uv sync --extra cuda  # GPU (CUDA 12)
-# uv sync            # CPU only
+conda create -n monocular-torch --override-channels -c conda-forge python=3.11 ffmpeg -y
+conda activate monocular-torch
+uv pip install -e '.[dev]'
 ```
 
 **EGL/OpenGL system dependencies:** The rendering pipeline uses EGL (via PyOpenGL and MuJoCo). On Ubuntu/Debian, install the required system packages before running:
 ```
 sudo apt-get install libgl1 libegl1 libgles2 libosmesa6-dev libglib2.0-0 ffmpeg
 ```
-`MUJOCO_GL` and `PYOPENGL_PLATFORM` default to `egl`. Update these environment variables if you need to use a different rendering backend.
+`MUJOCO_GL` and `PYOPENGL_PLATFORM` default to `egl` on Linux. macOS uses GLFW and the default PyOpenGL backend. Update these environment variables if you need a different rendering backend.
 
-Note: Setting `"setuptools==81.0.0"` in pyproject.toml may help resolve some tensorflow version errors. 
+The existing `PyOpenGL==3.1.10` override is retained for rendering compatibility. Dependency checkers may flag Pyrender's older exact pin.
+
+The default video workflow uses PyTorch for detection and fitting. CUDA is selected when available. CPU trajectory evaluation uses float32, while CUDA uses the original float16 compute policy with float32 network parameters. MuJoCo loads the model and renders the fitted motion.
 
 Note 2: Windows is not supported. WSL may work for biomechanical fitting but is not supported for overlay creation.
 
 
+## Changes in this fork
+
+This fork is maintained independently from the [original repository](https://github.com/IntelligentSensingAndRehabilitation/MonocularBiomechanics). The abstract and clinical study above describe the upstream work.
+
+- **PyTorch new-video fitting:** Metrabs detection, trajectory networks, camera projection, and differentiable forward kinematics; the demo and notebook use Torch by default. Original JAX modules remain available via `.[reference]`.
+- **Apple GPU fitting:** `get_model(..., device="mps")` uses float32 geometry and batched parallel kinematics. CPU remains supported; CUDA is selected automatically when available but has not been validated here. Detection defaults to CPU on Apple Silicon.
+- **Validation tools:** MuJoCo/JAX position and gradient comparisons, CPU/MPS parity tests, and OpenCap scoring for all 27 comparable joint coordinates. The six-clip 5,000-step GPU study retained the knee improvement (14.51° → 10.36° MAE versus CPU 2k; 5/6 participants improved), with median fitting time about 120 s versus 304 s for historical CPU 5k fits.
+- **Portable gallery:** synchronized raw footage, ground truth, and Torch predictions side by side; export a folder that opens offline through `index.html`.
+
+This port covers kinematic fitting, not differentiable contacts or physics rollouts. The six-clip study is preliminary; it does not establish clinical accuracy. See [usage and validation details](docs/torch-port.md).
+
 ## Gradio demo
 ```
-uv run python main.py
+python main.py
 ```
 A local webpage will open to upload and run the code.
 
@@ -56,7 +70,7 @@ Note that this demo is not optimized for videos with many people in view -- if y
 
 
 # Jupyter Notebook
-A jupyter notebook with steps to run the pipeline can be found [here](https://github.com/IntelligentSensingAndRehabilitation/MonocularBiomechanics/blob/main/monocular-demo.ipynb).
+A jupyter notebook with steps to run the pipeline can be found [here](monocular-demo.ipynb).
 
 # Reproducing Paper Analysis
 To reproduce the error tables from the paper, first download the data from [Zenodo](https://doi.org/10.5281/zenodo.20450570) and place the CSV files in `data/clinical/`, then run:
@@ -78,4 +92,3 @@ This work has been presented at the [2024 American Society of Biomechanics Meeti
 	date = {2025-07-11},
 }
 ```
-

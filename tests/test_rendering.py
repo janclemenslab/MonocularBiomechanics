@@ -1,7 +1,9 @@
 import os
+import sys
 
-os.environ.setdefault("MUJOCO_GL", "egl")
-os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+os.environ.setdefault("MUJOCO_GL", "glfw" if sys.platform == "darwin" else "egl")
+if sys.platform != "darwin":
+    os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 
 import numpy as np
 
@@ -15,7 +17,7 @@ def test_visualize_importable():
 def test_get_composed_meshes_returns_vertices_and_faces():
     import mujoco
     from monocular_demos.biomechanics_mjx.visualize import get_composed_meshes
-    from monocular_demos.biomechanics_mjx.forward_kinematics import ForwardKinematics
+    from monocular_demos.biomechanics_mjx.native_model import ForwardKinematics
 
     fk = ForwardKinematics()
     model = fk.model
@@ -30,8 +32,8 @@ def test_get_composed_meshes_returns_vertices_and_faces():
 
 def test_get_overlay_monocular_returns_callable():
     from monocular_demos.biomechanics_mjx.visualize import get_overlay_monocular
-    from monocular_demos.biomechanics_mjx.forward_kinematics import ForwardKinematics
-    from monocular_demos.dataset import get_samsung_calibration
+    from monocular_demos.biomechanics_mjx.native_model import ForwardKinematics
+    from monocular_demos.torch_dataset import get_samsung_calibration
 
     fk = ForwardKinematics()
     model = fk.model

@@ -1,8 +1,10 @@
 import os
+import sys
 from pathlib import Path
 
-os.environ.setdefault("MUJOCO_GL", "egl")
-os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+os.environ.setdefault("MUJOCO_GL", "glfw" if sys.platform == "darwin" else "egl")
+if sys.platform != "darwin":
+    os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 
 import numpy as np
 import pytest
@@ -54,8 +56,8 @@ def detected_keypoints(test_video):
 def fitted_model(test_video, detected_keypoints):
     """Build dataset from detected keypoints and run biomechanical fitting."""
     import cv2
-    from monocular_demos.dataset import MonocularDataset, get_samsung_calibration
-    from monocular_demos.biomechanics_mjx.monocular_trajectory import get_model, fit_model
+    from monocular_demos.torch_dataset import MonocularDataset, get_samsung_calibration
+    from monocular_demos.biomechanics_mjx.torch_monocular_trajectory import get_model, fit_model
     from monocular_demos.utils import joint_names
 
     kp3d, kp2d, confs = detected_keypoints
@@ -146,6 +148,7 @@ def test_render_overlay_on_detected_and_fitted_data(test_video, fitted_model):
     shutil.copy2(test_video, tmp_video)
     output_path = tmp_video.replace(".mp4", "_overlay.mp4")
 
+    fitted.requires_grad_(False)
     fit_timestamps = dataset.get_all_timestamps(0)
     (state, _, _), (qpos, _, _), _ = fitted(
         fit_timestamps,
@@ -159,8 +162,8 @@ def test_render_overlay_on_detected_and_fitted_data(test_video, fitted_model):
     try:
         output = render_overlay(
             fit_timestamps=np.array(fit_timestamps),
-            qpos=np.array(qpos),
-            body_scale=np.array(fitted.body_scale),
+            qpos=qpos.detach().cpu().numpy(),
+            body_scale=fitted.body_scale.detach().cpu().numpy(),
             video_path=tmp_video,
             width=width,
             height=height,
@@ -175,3 +178,11 @@ def test_render_overlay_on_detected_and_fitted_data(test_video, fitted_model):
             os.remove(tmp_video)
         if os.path.exists(output_path):
             os.remove(output_path)
+
+
+def test_metrabs_empty_frames(detected_keypoints):
+    from monocular_demos.utils import load_metrabs
+    prediction = load_metrabs().detect_poses_batched(np.zeros((2, 64, 64, 3), dtype=np.uint8))
+    assert len(prediction['boxes']) == 2
+    assert all(tuple(p.shape) == (0, 87, 3) for p in prediction['poses3d'])
+    assert all(tuple(p.shape) == (0, 87, 2) for p in prediction['poses2d'])
