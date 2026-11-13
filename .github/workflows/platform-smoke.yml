@@ -1,0 +1,120 @@
+name: Platform smoke tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      video:
+        description: Run four-frame detection and rendering test (downloads cached models)
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/platform-smoke.yml
+      - monocular_demos/**
+      - tests/test_torch_*.py
+      - tests/test_video_smoke.py
+      - pyproject.toml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  torch-cpu:
+    name: Torch (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            python: python.exe
+            bin: Library/bin
+            torch-index: https://download.pytorch.org/whl/cpu
+            render-packages: ffmpeg mesalib
+            gl: glfw
+          - platform: linux
+            runner: ubuntu-24.04
+            python: bin/python
+            bin: bin
+            torch-index: https://download.pytorch.org/whl/cpu
+            render-packages: ffmpeg
+            gl: osmesa
+          - platform: macos-arm64
+            runner: macos-15
+            python: bin/python
+            bin: bin
+            torch-index: https://pypi.org/simple
+            render-packages: ffmpeg
+            gl: glfw
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+        with:
+          miniforge-version: latest
+          python-version: "3.11"
+          activate-environment: smoke
+          channels: conda-forge
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/workflows/platform-smoke.yml
+      - name: Install CPU fitting dependencies
+        run: |
+          uv pip install --python "$env:CONDA/envs/smoke/${{ matrix.python }}" "torch>=2.2" --index-url ${{ matrix.torch-index }}
+          uv pip install --python "$env:CONDA/envs/smoke/${{ matrix.python }}" "mujoco==3.9.0" numpy tqdm pytest
+          uv pip install --python "$env:CONDA/envs/smoke/${{ matrix.python }}" --no-deps -e .
+      - name: Test kinematics, gradients and short synthetic fits
+        run: '& "$env:CONDA/envs/smoke/${{ matrix.python }}" -m pytest -q -rs tests/test_torch_kinematics.py tests/test_torch_fitting.py'
+      - name: Cache pretrained detector
+        if: github.event_name == 'workflow_dispatch' && inputs.video
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/monocular-biomechanics
+          key: ${{ matrix.platform }}-metrabs-${{ hashFiles('monocular_demos/metrabs_torch.py') }}
+      - name: Install Linux headless OpenGL
+        if: github.event_name == 'workflow_dispatch' && inputs.video && runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libosmesa6
+      - name: Install optional video and rendering dependencies
+        if: github.event_name == 'workflow_dispatch' && inputs.video
+        run: |
+          conda install --name smoke --override-channels -c conda-forge -y ${{ matrix.render-packages }}
+          uv pip install --python "$env:CONDA/envs/smoke/${{ matrix.python }}" torchvision --index-url ${{ matrix.torch-index }}
+          "PyOpenGL==3.1.10" | Set-Content "$env:RUNNER_TEMP/video-overrides.txt"
+          uv pip install --python "$env:CONDA/envs/smoke/${{ matrix.python }}" --overrides "$env:RUNNER_TEMP/video-overrides.txt" -e '.[dev]'
+          if ($IsWindows) {
+            Copy-Item "$env:CONDA/envs/smoke/Library/bin/opengl32.dll" "$env:CONDA/envs/smoke/opengl32.dll"
+          }
+          "$env:CONDA/envs/smoke/${{ matrix.bin }}" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Test real detection, fitting and rendered videos
+        if: github.event_name == 'workflow_dispatch' && inputs.video
+        env:
+          MUJOCO_GL: ${{ matrix.gl }}
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          if ($IsLinux) { $env:PYOPENGL_PLATFORM = "osmesa" }
+          New-Item -ItemType Directory -Force validation | Out-Null
+          & "$env:CONDA/envs/smoke/${{ matrix.python }}" -m pytest -q -s tests/test_video_smoke.py --basetemp=validation/${{ matrix.platform }}-video-smoke
+      - name: Save short videos and diagnostics
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.video
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.platform }}-video-smoke
+          path: validation/${{ matrix.platform }}-video-smoke
+          retention-days: 3

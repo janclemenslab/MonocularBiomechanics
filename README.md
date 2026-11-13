@@ -42,7 +42,7 @@ The existing `PyOpenGL==3.1.10` override is retained for rendering compatibility
 
 The default video workflow uses PyTorch for detection and fitting. CUDA is selected when available. CPU trajectory evaluation uses float32, while CUDA uses the original float16 compute policy with float32 network parameters. MuJoCo loads the model and renders the fitted motion.
 
-Windows: a [lightweight CPU check](.github/workflows/windows-smoke.yml) runs in GitHub Actions. For real detection and rendering, manually run the workflow with **video** enabled: four reduced-size frames, 20 fitting steps, cached models and software OpenGL. The interactive GUI and GPU acceleration are not covered.
+macOS, Linux and Windows: [lightweight CPU checks](.github/workflows/platform-smoke.yml) run in GitHub Actions. For real detection and rendering on all three platforms, manually run the workflow with **video** enabled: four reduced-size frames, 20 fitting steps and cached models. Linux and Windows use software OpenGL; macOS uses native offscreen OpenGL. Interactive GUI and CUDA are not covered.
 
 
 ## Changes in this fork
