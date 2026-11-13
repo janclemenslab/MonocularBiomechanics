@@ -42,7 +42,7 @@ The existing `PyOpenGL==3.1.10` override is retained for rendering compatibility
 
 The default video workflow uses PyTorch for detection and fitting. CUDA is selected when available. CPU trajectory evaluation uses float32, while CUDA uses the original float16 compute policy with float32 network parameters. MuJoCo loads the model and renders the fitted motion.
 
-Note 2: Windows is not supported. WSL may work for biomechanical fitting but is not supported for overlay creation.
+Windows: a [lightweight CPU fitting check](.github/workflows/windows-smoke.yml) runs in GitHub Actions. Full detection, GUI and overlay rendering on Windows are not covered.
 
 
 ## Changes in this fork

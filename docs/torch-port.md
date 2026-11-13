@@ -32,6 +32,8 @@ python -m pytest -q tests/test_pipeline.py tests/test_rendering.py
 
 The first group checks positions and gradients against native MuJoCo and JAX/MJX, serial/parallel parity, camera projection, trajectory sampling, fitting and CPU/MPS parity. The full pipeline tests run real detection, fitting and rendering and may download weights.
 
+The [Windows CPU smoke workflow](../.github/workflows/windows-smoke.yml) runs on relevant pushes to the fork's `main` and can also be started manually in Actions. One Python 3.11 conda environment installs CPU-only Torch and the minimal fitting dependencies, then runs the existing kinematics and synthetic fitting tests. JAX and Apple GPU checks skip because those dependencies/devices are absent. The job has a ten-minute limit and caches downloads; it does not download detector weights or evaluation videos. It checks CPU fitting code and editable package installation, not the complete dependency installation, detection, GUI, CUDA or rendering.
+
 ## OpenCap evaluation
 
 The [OpenCap SimTK validation archive](https://simtk.org/frs/?group_id=2385), `LabValidation_withVideos.zip`, is about 19 GB and requires login and acceptance of its license. Keep it outside Git. `analysis.extract_opencap_pilot` extracts a small pilot; `analysis.evaluate_opencap` evaluates one camera/trial. Run either module with `--help` for its inputs. Original TensorFlow detections require a separate environment:

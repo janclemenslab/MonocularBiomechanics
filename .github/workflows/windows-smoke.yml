@@ -1,0 +1,48 @@
+name: Windows CPU smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-smoke.yml
+      - monocular_demos/**
+      - tests/test_torch_*.py
+      - pyproject.toml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  torch-cpu:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash -el {0}
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: conda-incubator/setup-miniconda@v4
+        with:
+          miniforge-version: latest
+          python-version: "3.11"
+          activate-environment: windows-smoke
+          channels: conda-forge
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/workflows/windows-smoke.yml
+      - name: Install CPU fitting dependencies
+        run: |
+          uv pip install --python python "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --python python "mujoco==3.9.0" numpy tqdm pytest
+          uv pip install --python python --no-deps -e .
+      - name: Test kinematics, gradients and short synthetic fits
+        run: python -m pytest -q -rs tests/test_torch_kinematics.py tests/test_torch_fitting.py
