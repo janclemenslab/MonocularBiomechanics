@@ -11,6 +11,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/platform-smoke.yml
+      - .github/scripts/**
       - monocular_demos/**
       - tests/test_torch_*.py
       - tests/test_video_smoke.py
@@ -99,6 +100,9 @@ jobs:
           uv pip install --python "$env:CONDA/envs/smoke/${{ matrix.python }}" --overrides "$env:RUNNER_TEMP/video-overrides.txt" -e '.[dev]'
           if ($IsWindows) {
             Copy-Item "$env:CONDA/envs/smoke/Library/bin/opengl32.dll" "$env:CONDA/envs/smoke/opengl32.dll"
+          }
+          if ($IsMacOS) {
+            & "$env:CONDA/envs/smoke/${{ matrix.python }}" .github/scripts/macos_software_gl.py
           }
           "$env:CONDA/envs/smoke/${{ matrix.bin }}" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Test real detection, fitting and rendered videos
