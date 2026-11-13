@@ -73,7 +73,9 @@ jobs:
           MUJOCO_GL: glfw
           GALLIUM_DRIVER: llvmpipe
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: '& "$env:CONDA/envs/windows-smoke/python.exe" -m pytest -q -s tests/test_video_smoke.py --basetemp=validation/windows-video-smoke'
+        run: |
+          New-Item -ItemType Directory -Force validation | Out-Null
+          & "$env:CONDA/envs/windows-smoke/python.exe" -m pytest -q -s tests/test_video_smoke.py --basetemp=validation/windows-video-smoke
       - name: Save short videos and diagnostics
         if: always() && github.event_name == 'workflow_dispatch' && inputs.video
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
