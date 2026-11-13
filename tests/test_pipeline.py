@@ -2,8 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("MUJOCO_GL", "glfw" if sys.platform == "darwin" else "egl")
-if sys.platform != "darwin":
+os.environ.setdefault("MUJOCO_GL", "egl" if sys.platform == "linux" else "glfw")
+if sys.platform == "linux":
     os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 
 import numpy as np

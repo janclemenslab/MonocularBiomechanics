@@ -36,13 +36,13 @@ uv pip install -e '.[dev]'
 ```
 sudo apt-get install libgl1 libegl1 libgles2 libosmesa6-dev libglib2.0-0 ffmpeg
 ```
-`MUJOCO_GL` and `PYOPENGL_PLATFORM` default to `egl` on Linux. macOS uses GLFW and the default PyOpenGL backend. Update these environment variables if you need a different rendering backend.
+`MUJOCO_GL` and `PYOPENGL_PLATFORM` default to `egl` on Linux. macOS and Windows use GLFW and the default PyOpenGL backend. Update these environment variables if you need a different rendering backend.
 
 The existing `PyOpenGL==3.1.10` override is retained for rendering compatibility. Dependency checkers may flag Pyrender's older exact pin.
 
 The default video workflow uses PyTorch for detection and fitting. CUDA is selected when available. CPU trajectory evaluation uses float32, while CUDA uses the original float16 compute policy with float32 network parameters. MuJoCo loads the model and renders the fitted motion.
 
-Windows: a [lightweight CPU fitting check](.github/workflows/windows-smoke.yml) runs in GitHub Actions. Full detection, GUI and overlay rendering on Windows are not covered.
+Windows: a [lightweight CPU check](.github/workflows/windows-smoke.yml) runs in GitHub Actions. For real detection and rendering, manually run the workflow with **video** enabled: four reduced-size frames, 20 fitting steps, cached models and software OpenGL. The interactive GUI and GPU acceleration are not covered.
 
 
 ## Changes in this fork
