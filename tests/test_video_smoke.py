@@ -57,6 +57,13 @@ def test_short_video_detection_fitting_and_rendering(tmp_path):
         keypoints_3d=[kp3d[None]], keypoint_confidence=[np.ones((1, 4, 87))],
         camera_params=calibration, phone_attitude=None)
     model = get_model(dataset, joint_names=joint_names, device='cpu', features=(16, 32), concatenate_layers=1)
+    metadata = ForwardKinematics()
+    # Put the tiny test fit at the observed pelvis; twenty steps are not a convergence study.
+    with torch.no_grad():
+        pelvis = joint_names.index('mhip')
+        delta = torch.tensor(kp3d[:, pelvis].mean(0)/1000)-model(times, skip_vel=True)[0][0].site_xpos[:, pelvis].mean(0)
+        for name, shift in [('pelvis_tx', delta[0]), ('pelvis_tz', -delta[1]), ('pelvis_ty', delta[2])]:
+            model.trajectory[0].final.bias[int(metadata.model.joint(name).qposadr[0])].add_(shift)
     start = time.perf_counter()
     model, metrics = fit_model(model, dataset, max_iters=20, lr_init_value=.01)
     assert torch.isfinite(metrics['total']).all()
@@ -66,7 +73,6 @@ def test_short_video_detection_fitting_and_rendering(tmp_path):
     assert qpos.shape == (4, 40) and np.isfinite(qpos).all()
     start = time.perf_counter()
     from monocular_demos.biomechanics_mjx.visualize import get_overlay_monocular, render_trajectory, video_overlay
-    metadata = ForwardKinematics()
     scaled = scale_model(metadata.model, 1+metadata.build_default_scale_mixer()@model.body_scale.detach().numpy())
     overlay = get_overlay_monocular(calibration, np.zeros((4, 3)), scaled, qpos,
         np.arange(4), np.ones(4, dtype=bool), width=480, height=270)
