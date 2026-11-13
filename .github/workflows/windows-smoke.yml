@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        shell: bash -el {0}
+        shell: pwsh
     env:
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
@@ -41,8 +41,8 @@ jobs:
           cache-dependency-glob: .github/workflows/windows-smoke.yml
       - name: Install CPU fitting dependencies
         run: |
-          uv pip install --python python "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu
-          uv pip install --python python "mujoco==3.9.0" numpy tqdm pytest
-          uv pip install --python python --no-deps -e .
+          uv pip install --python "$env:CONDA/envs/windows-smoke/python.exe" "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --python "$env:CONDA/envs/windows-smoke/python.exe" "mujoco==3.9.0" numpy tqdm pytest
+          uv pip install --python "$env:CONDA/envs/windows-smoke/python.exe" --no-deps -e .
       - name: Test kinematics, gradients and short synthetic fits
-        run: python -m pytest -q -rs tests/test_torch_kinematics.py tests/test_torch_fitting.py
+        run: '& "$env:CONDA/envs/windows-smoke/python.exe" -m pytest -q -rs tests/test_torch_kinematics.py tests/test_torch_fitting.py'
